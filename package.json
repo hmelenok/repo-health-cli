@@ -3,7 +3,7 @@
 	"version": "0.0.0",
 	"description": "Org repo chores",
 	"license": "MIT",
-	"repository": "Yhmelenok/repo-health-cli",
+	"repository": "hmelenok/repo-health-cli",
 	"author": {
 		"name": "Mykyta Khmel",
 		"email": "hmelenok@gmail.com",
@@ -17,7 +17,8 @@
 		"node": ">=14"
 	},
 	"scripts": {
-		"test": "xo && ava"
+		"test": "xo && ava",
+		"precommit": "eslint ."
 	},
 	"files": [
 		"cli.js"
@@ -29,12 +30,19 @@
 		"chores"
 	],
 	"dependencies": {
+		"inquirer": "9.1.4",
 		"meow": "^9.0.0",
-		"unicorn-fun": "^0.0.0"
+		"repo-health-cli": "^0.0.0"
 	},
 	"devDependencies": {
 		"ava": "^3.15.0",
+		"eslint": "^8.26.0",
+		"eslint-config-esnext": "^4.1.0",
+		"eslint-config-node": "^4.1.0",
+		"eslint-config-recommended": "^4.1.0",
+		"eslint-plugin-babel": "^5.3.1",
 		"execa": "^5.0.0",
+		"husky": "^8.0.1",
 		"xo": "^0.37.0"
 	}
 }

@@ -1,6 +1,8 @@
 #!/usr/bin/env node
-import meow from 'meow';
-import unicornFun from 'unicorn-fun';
+// eslint-disable-next-line import/extensions
+import index from './index.js'
+import meow from 'meow'
+
 
 const cli = meow(`
 	Usage
@@ -18,9 +20,9 @@ const cli = meow(`
 	flags: {
 		postfix: {
 			type: 'string',
-			default: 'rainbows'
-		}
-	}
-});
+			default: 'rainbows',
+		},
+	},
+})
 
-console.log(moduleName(cli.input[0] || 'unicorns', cli.flags));
+console.log(index(cli.input[0], cli.flags))
