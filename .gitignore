@@ -1,5 +1,5 @@
 node_modules
 yarn.lock
-.idea
+.idea/*
 repo-health-cli.iml
 yarn-error.log
