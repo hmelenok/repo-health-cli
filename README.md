@@ -1,7 +1,6 @@
-# node-cli-boilerplate
+# repo-health-cli
 
-
-#
+## Reasons and goals
 
 > Goals
 > - Merge repo PRs with aprouves if status chacks are passed
