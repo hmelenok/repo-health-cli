@@ -6,6 +6,7 @@ Narrow down vulume of PR by next filters:
 - repository
 - labels
 - Failed/successful Circle CI checks
+- Approve & merge PR
 
 ## Reasons and goals
 
