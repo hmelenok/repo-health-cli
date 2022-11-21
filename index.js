@@ -1,22 +1,238 @@
+import { Octokit } from '@octokit/rest'
 import inquirer from 'inquirer'
+import ora from 'ora'
 
-const categories = [ 'Merge PRs', 'Report TS', 'Report unit test metrics' ]
+const spinner = ora('Loading')
 
-const getOrganizations = async () => []
+const octokit = new Octokit({
+	auth: process.env.GITHUB_TOKEN,
+})
+
+
+const selectConlusionEmoji = conclusion => {
+	switch (conclusion) {
+		case 'success':
+			return '✅'
+		case 'failure':
+			return '❌'
+		default:
+			return ''
+	}
+}
+
+const selectStatusEmoji = status => {
+	switch (status) {
+		case 'completed':
+			return '🏁'
+		case 'queued':
+			return '⌛'
+		default:
+			return ''
+	}
+}
+
+const categories = [ 'Merge PRs'/* , 'Report TS', 'Report unit test metrics' */ ]
+
+const getOrganizations = async () => {
+	spinner.start()
+
+	spinner.color = 'yellow'
+	spinner.text = 'Checking user'
+	const { data: user } = await octokit.rest.users.getAuthenticated()
+
+
+	spinner.color = 'green'
+	spinner.text = 'Checking orgs'
+	const { data: orgs } = await octokit.rest.orgs.listForUser({ username: user.login })
+
+	spinner.stop()
+
+	return orgs
+}
+
+const getRepos = async org => {
+	spinner.start()
+
+	spinner.color = 'red'
+	spinner.text = 'Checking repos'
+	const { data: repos1 } = await octokit.rest.repos.listForOrg({ org,
+		sort: 'full_name',
+		per_page: 100 })
+	const { data: repos2 } = await octokit.rest.repos.listForOrg({ org,
+		sort: 'full_name',
+		per_page: 100,
+		page: 2 })
+	const { data: repos3 } = await octokit.rest.repos.listForOrg({ org,
+		sort: 'full_name',
+		per_page: 100,
+		page: 3 })
+	spinner.stop()
+
+	return [ ...repos1, ...repos2, ...repos3 ].filter(repo => repo.archived === false)
+}
+
+
+const getPrs = async ({ repo, owner }) => {
+	spinner.start()
+
+	spinner.color = 'magenta'
+	spinner.text = 'Checking pulls'
+	const { data: prs } = await octokit.rest.pulls.list({
+		owner,
+		repo,
+	})
+
+	spinner.stop()
+
+
+	return prs
+}
+
+// eslint-disable-next-line camelcase
+// const getPr = async ({ repo, owner, pull_number }) => {
+// 	spinner.start()
+//
+// 	spinner.color = 'magenta'
+// 	spinner.text = 'Checking pulls'
+// 	const { data: prs } = await octokit.rest.pulls.get({
+// 		owner,
+// 		repo,
+// 		// eslint-disable-next-line camelcase
+// 		pull_number,
+// 	})
+//
+// 	spinner.stop()
+//
+//
+// 	return prs
+// }
 
 const mergePRs = async () => {
 	const organizations = await getOrganizations()
-
-	inquirer
+	const { Organization } = await inquirer
 		.prompt([
 			{ type: 'list',
 				name: 'Organization',
-				choices: organizations },
+				choices: organizations.map(({ login, ...rest }) => ({ name: login,
+					...rest })) },
 		])
-		.then(answers => {
-			console.warn(answers)
-			// Use user feedback for... whatever!!
-		})
+
+	const selectedOrg = organizations.find(({ login }) => login === Organization)
+	const repos = await getRepos(selectedOrg.login)
+	const repoTopics = Array.from(repos.reduce((memo, repo) => {
+		repo.topics.forEach(topic => memo.add(topic))
+
+		return memo
+	}, new Set())).sort()
+
+	// console.warn({ repoTopics })
+
+	const { Topics } = await inquirer
+		.prompt([ { type: 'checkbox',
+			name: 'Topics',
+			message: 'Please select topics to filter',
+			choices: repoTopics } ])
+
+
+
+
+	const { Repos } = await inquirer
+		.prompt([ { type: 'checkbox',
+			name: 'Repos',
+			message: 'Please select repos',
+			choices: repos.filter(repo => Topics?.length > 0 ? Topics.map(Topic => repo.topics.includes(Topic)).every(Boolean) : true) } ])
+
+
+	const prs = (await Promise.all(repos.filter(repo => Repos.length > 0 ? Repos.includes(repo.name) : true).map(({ name }) => getPrs({ owner: Organization,
+		repo: name })))).reduce((memo, repoPrs) => [ ...memo, ...repoPrs ], [])
+
+
+	const labels = Array.from(prs.reduce((memo, pr) => {
+		pr.labels.map(label => memo.add(label.name))
+
+		return memo
+	}, new Set()))
+
+
+	const { Labels } = await inquirer
+		.prompt([ { type: 'checkbox',
+			name: 'Labels',
+			message: 'Please select labels to list PRs',
+			choices: labels } ])
+	let filteredPRs = prs.filter(pr => Labels.map(Label => pr.labels.find(({ name }) => name === Label)).every(Boolean))
+
+
+	const checks = await Promise.all(filteredPRs.map(selectedPR => octokit.rest.checks.listSuitesForRef({
+		owner: selectedOrg.login,
+		repo: selectedPR.head.repo.name,
+		ref: selectedPR.head.ref,
+	})))
+
+	filteredPRs = filteredPRs.map(selectedPR => {
+		// eslint-disable-next-line camelcase
+		const CircleChecks = checks.find(({ data: { check_suites } }) => check_suites.find(({ head_branch }) => head_branch === selectedPR.head.ref)).data.check_suites.filter(check => check.app.slug === 'circleci-checks')
+
+
+		return { ...selectedPR,
+			circleStatus: CircleChecks?.length > 0 ? CircleChecks.reduce((memo, { status }) => `${ memo ? memo + ',' : '' }${ status }`, '') : '',
+			circleConclusion: CircleChecks?.length > 0 ? CircleChecks.reduce((memo, { conclusion }) => `${ memo ? memo + ',' : '' }${ conclusion }`, '') : '',
+			checks: CircleChecks }
+	})
+
+	// console.warn({ Labels,
+	// 	filteredPRs })
+
+
+	const { Merge } = await inquirer
+		.prompt([ { type: 'checkbox',
+			name: 'Merge',
+			message: 'Please select pr\'s to merge from list',
+			// eslint-disable-next-line camelcase
+			choices: filteredPRs.map(({ title, html_url, ...others }) => ({ name: `[${ selectStatusEmoji(others.circleStatus) } ${ selectConlusionEmoji(others.circleConclusion) } ] ${ title } - ${ html_url }`,
+				title,
+				// eslint-disable-next-line camelcase
+				html_url,
+				...others })) } ])
+	const selectedPrs = Merge.map(title => filteredPRs.find(pr => title.split(` - `)[1] === pr.html_url))
+
+	// const detailedPrs = await Promise.all(selectedPrs.map(selectedPR => {
+	// 	// console.warn('detailedPrs', { selectedPR })
+	//
+	// 	const prParams = { repo: selectedPR.url.split(`${ selectedOrg.login }/`)[1].split('/pulls/')[0],
+	// 		pull_number: selectedPR.number,
+	// 		owner: selectedOrg.login }
+	//
+	// 	// console.warn('detailedPrs', { prParams })
+	//
+	// 	return getPr(prParams)
+	// }))
+
+	const reviews = await Promise.all(selectedPrs.map(selectedPR => octokit.rest.pulls.createReview({ owner: selectedOrg.login,
+		repo: selectedPR.head.repo.name,
+		pull_number: selectedPR.number,
+		event: 'APPROVE' })))
+	// await Promise.all(reviews.map(({ data: { id } }) => octokit.rest.pulls.submitReview({ owner: selectedOrg.login })))
+
+	// // eslint-disable-next-line camelcase
+	// const submits = await Promise.all(reviews.map(({ data: { id, pull_request_url } }) => octokit.rest.pulls.submitReview({ owner: selectedOrg.login,
+	// 	// eslint-disable-next-line camelcase
+	// 	repo: pull_request_url.split(`${ selectedOrg.login }/`)[1].split('/pulls/')[0],
+	// 	// eslint-disable-next-line camelcase
+	// 	pull_number: pull_request_url.split(`/pulls/`)[1],
+	// 	review_id: id,
+	// 	event: 'APPROVE' })))
+
+	// fs.writeFileSync('data.json', JSON.stringify({ selectedPrs,
+	// 	reviews }, null, 2))
+
+
+	const merges = await Promise.all(selectedPrs.map(selectedPR => octokit.rest.pulls.merge({ owner: selectedOrg.login,
+		repo: selectedPR.head.repo.name,
+		pull_number: selectedPR.number })))
+
+
+	console.warn({ reviews,
+		merges })
 }
 
 const index = function () {
@@ -45,6 +261,8 @@ const index = function () {
 			else
 				console.warn('Something went wrong!', { error })
 			// Something else went wrong
+
+			throw error
 		})
 
 
