@@ -17,7 +17,7 @@
 		"node": ">=14"
 	},
 	"scripts": {
-		"test": "xo && ava",
+		"test": "echo \"Error: no test specified\" && exit 1",
 		"precommit": "eslint ."
 	},
 	"files": [
