@@ -4,6 +4,13 @@ import ora from 'ora'
 
 const spinner = ora('Loading')
 
+if (process.env.GITHUB_TOKEN?.length < 0)
+// eslint-disable-next-line no-throw-literal
+	throw 'Please set GITHUB_TOKEN environment variable'
+
+
+
+
 const octokit = new Octokit({
 	auth: process.env.GITHUB_TOKEN,
 })
@@ -88,25 +95,6 @@ const getPrs = async ({ repo, owner }) => {
 	return prs
 }
 
-// eslint-disable-next-line camelcase
-// const getPr = async ({ repo, owner, pull_number }) => {
-// 	spinner.start()
-//
-// 	spinner.color = 'magenta'
-// 	spinner.text = 'Checking pulls'
-// 	const { data: prs } = await octokit.rest.pulls.get({
-// 		owner,
-// 		repo,
-// 		// eslint-disable-next-line camelcase
-// 		pull_number,
-// 	})
-//
-// 	spinner.stop()
-//
-//
-// 	return prs
-// }
-
 const mergePRs = async () => {
 	const organizations = await getOrganizations()
 	const { Organization } = await inquirer
@@ -179,9 +167,6 @@ const mergePRs = async () => {
 			checks: CircleChecks }
 	})
 
-	// console.warn({ Labels,
-	// 	filteredPRs })
-
 
 	const { Merge } = await inquirer
 		.prompt([ { type: 'checkbox',
@@ -195,36 +180,10 @@ const mergePRs = async () => {
 				...others })) } ])
 	const selectedPrs = Merge.map(title => filteredPRs.find(pr => title.split(` - `)[1] === pr.html_url))
 
-	// const detailedPrs = await Promise.all(selectedPrs.map(selectedPR => {
-	// 	// console.warn('detailedPrs', { selectedPR })
-	//
-	// 	const prParams = { repo: selectedPR.url.split(`${ selectedOrg.login }/`)[1].split('/pulls/')[0],
-	// 		pull_number: selectedPR.number,
-	// 		owner: selectedOrg.login }
-	//
-	// 	// console.warn('detailedPrs', { prParams })
-	//
-	// 	return getPr(prParams)
-	// }))
-
 	const reviews = await Promise.all(selectedPrs.map(selectedPR => octokit.rest.pulls.createReview({ owner: selectedOrg.login,
 		repo: selectedPR.head.repo.name,
 		pull_number: selectedPR.number,
 		event: 'APPROVE' })))
-	// await Promise.all(reviews.map(({ data: { id } }) => octokit.rest.pulls.submitReview({ owner: selectedOrg.login })))
-
-	// // eslint-disable-next-line camelcase
-	// const submits = await Promise.all(reviews.map(({ data: { id, pull_request_url } }) => octokit.rest.pulls.submitReview({ owner: selectedOrg.login,
-	// 	// eslint-disable-next-line camelcase
-	// 	repo: pull_request_url.split(`${ selectedOrg.login }/`)[1].split('/pulls/')[0],
-	// 	// eslint-disable-next-line camelcase
-	// 	pull_number: pull_request_url.split(`/pulls/`)[1],
-	// 	review_id: id,
-	// 	event: 'APPROVE' })))
-
-	// fs.writeFileSync('data.json', JSON.stringify({ selectedPrs,
-	// 	reviews }, null, 2))
-
 
 	const merges = await Promise.all(selectedPrs.map(selectedPR => octokit.rest.pulls.merge({ owner: selectedOrg.login,
 		repo: selectedPR.head.repo.name,
