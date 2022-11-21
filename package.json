@@ -21,6 +21,7 @@
 		"precommit": "eslint ."
 	},
 	"files": [
+		"index.js",
 		"cli.js"
 	],
 	"keywords": [
