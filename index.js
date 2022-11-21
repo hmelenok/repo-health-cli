@@ -6,7 +6,7 @@ const spinner = ora('Loading')
 
 if (process.env.GITHUB_TOKEN?.length < 0)
 // eslint-disable-next-line no-throw-literal
-	throw 'Please set GITHUB_TOKEN environment variable'
+	throw 'Please set GITHUB_TOKEN environment variable - https://github.com/settings/tokens/new'
 
 
 
@@ -171,7 +171,7 @@ const mergePRs = async () => {
 	const { Merge } = await inquirer
 		.prompt([ { type: 'checkbox',
 			name: 'Merge',
-			message: 'Please select pr\'s to merge from list',
+			message: 'Please select pr\'s to merge from list (Approve -> Merge if possible)',
 			// eslint-disable-next-line camelcase
 			choices: filteredPRs.map(({ title, html_url, ...others }) => ({ name: `[${ selectStatusEmoji(others.circleStatus) } ${ selectConlusionEmoji(others.circleConclusion) } ] ${ title } - ${ html_url }`,
 				title,
@@ -180,18 +180,40 @@ const mergePRs = async () => {
 				...others })) } ])
 	const selectedPrs = Merge.map(title => filteredPRs.find(pr => title.split(` - `)[1] === pr.html_url))
 
-	const reviews = await Promise.all(selectedPrs.map(selectedPR => octokit.rest.pulls.createReview({ owner: selectedOrg.login,
-		repo: selectedPR.head.repo.name,
-		pull_number: selectedPR.number,
-		event: 'APPROVE' })))
+	await Promise.all(selectedPrs.map(async selectedPR => {
+		let approve
+		try {
+			approve = await octokit.rest.pulls.createReview({ owner: selectedOrg.login,
+				repo: selectedPR.head.repo.name,
+				pull_number: selectedPR.number,
+				event: 'APPROVE' })
+			console.log('Approved - ', selectedPR.html_url)
+		} catch (e) {
+			console.warn(`Error approving PR ${ selectedPR.html_url }`, e.toString())
+		}
+		return approve
+	}))
 
-	const merges = await Promise.all(selectedPrs.map(selectedPR => octokit.rest.pulls.merge({ owner: selectedOrg.login,
-		repo: selectedPR.head.repo.name,
-		pull_number: selectedPR.number })))
+
+	await Promise.all(selectedPrs.map(async selectedPR => {
+		let merge
+
+		try {
+			merge = await octokit.rest.pulls.merge({ owner: selectedOrg.login,
+				repo: selectedPR.head.repo.name,
+				pull_number: selectedPR.number })
+
+			console.log('Merged - ', selectedPR.html_url)
+
+		} catch (e) {
+			console.warn(`Error merging PR ${ selectedPR.html_url }`, e.toString())
+		}
+
+		return merge
+	}))
 
 
-	console.warn({ reviews,
-		merges })
+
 }
 
 const index = function () {
