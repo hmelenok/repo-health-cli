@@ -1,4 +1,11 @@
 # repo-health-cli
+Merge pull requests from organization by criteria and with Circle CI checks
+Narrow down vulume of PR by next filters:
+- organization
+- topic
+- repository
+- labels
+- Failed/successful Circle CI checks
 
 ## Reasons and goals
 
