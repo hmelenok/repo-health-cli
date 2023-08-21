@@ -1,7 +1,12 @@
 import { Octokit } from '@octokit/rest'
 import inquirer from 'inquirer'
+import inquirerPrompt from 'inquirer-autocomplete-prompt'
+import inquirerCheckbox from 'inquirer-checkbox-plus-prompt'
 import ora from 'ora'
 
+inquirer.registerPrompt('checkbox-plus', inquirerCheckbox)
+
+inquirer.registerPrompt('autocomplete', inquirerPrompt)
 const spinner = ora('Loading')
 
 if (process.env.GITHUB_TOKEN?.length < 0)
@@ -73,13 +78,17 @@ const getRepos = async org => {
 		sort: 'full_name',
 		per_page: 100,
 		page: 3 })
+    const { data: repos4 } = await octokit.rest.repos.listForOrg({ org,
+        sort: 'full_name',
+        per_page: 100,
+        page: 4 })
 	spinner.stop()
 
-	return [ ...repos1, ...repos2, ...repos3 ].filter(repo => repo.archived === false)
+	return [ ...repos1, ...repos2, ...repos3 , ...repos4 ].filter(repo => repo.archived === false)
 }
 
 
-const getPrs = async ({ repo, owner }) => {
+const getPrs = async ({ repo, owner, query }) => {
 	spinner.start()
 
 	spinner.color = 'magenta'
@@ -87,6 +96,10 @@ const getPrs = async ({ repo, owner }) => {
 	const { data: prs } = await octokit.rest.pulls.list({
 		owner,
 		repo,
+        sort: 'updated',
+        state: 'open',
+        per_page: 100,
+        head: query || '',
 	})
 
 	spinner.stop()
@@ -99,10 +112,10 @@ const mergePRs = async () => {
 	const organizations = await getOrganizations()
 	const { Organization } = await inquirer
 		.prompt([
-			{ type: 'list',
+			{ type: 'autocomplete',
 				name: 'Organization',
-				choices: organizations.map(({ login, ...rest }) => ({ name: login,
-					...rest })) },
+				source: (answersSoFar, input = '') => organizations.map(({ login, ...rest }) => ({ name: login,
+					...rest })).filter(({ name }) => name.includes(input)) },
 		])
 
 	const selectedOrg = organizations.find(({ login }) => login === Organization)
@@ -116,7 +129,7 @@ const mergePRs = async () => {
 	// console.warn({ repoTopics })
 
 	const { Topics } = await inquirer
-		.prompt([ { type: 'checkbox',
+		.prompt([ { type: 'checkbox-plus',
 			name: 'Topics',
 			message: 'Please select topics to filter',
 			choices: repoTopics } ])
@@ -125,10 +138,16 @@ const mergePRs = async () => {
 
 
 	const { Repos } = await inquirer
-		.prompt([ { type: 'checkbox',
+		.prompt([ { type: 'checkbox-plus',
 			name: 'Repos',
 			message: 'Please select repos',
 			choices: repos.filter(repo => Topics?.length > 0 ? Topics.map(Topic => repo.topics.includes(Topic)).every(Boolean) : true) } ])
+
+    const { Query } = await inquirer
+        .prompt([ { type: 'checkbox-plus',
+            name: 'Query',
+            message: 'Enter search query',
+            choices: repos.filter(repo => Topics?.length > 0 ? Topics.map(Topic => repo.topics.includes(Topic)).every(Boolean) : true) } ])
 
 
 	const prs = (await Promise.all(repos.filter(repo => Repos.length > 0 ? Repos.includes(repo.name) : true).map(({ name }) => getPrs({ owner: Organization,
@@ -143,7 +162,7 @@ const mergePRs = async () => {
 
 
 	const { Labels } = await inquirer
-		.prompt([ { type: 'checkbox',
+		.prompt([ { type: 'checkbox-plus',
 			name: 'Labels',
 			message: 'Please select labels to list PRs',
 			choices: labels } ])
@@ -169,7 +188,7 @@ const mergePRs = async () => {
 
 
 	const { Merge } = await inquirer
-		.prompt([ { type: 'checkbox',
+		.prompt([ { type: 'checkbox-plus',
 			name: 'Merge',
 			message: 'Please select pr\'s to merge from list (Approve -> Merge if possible)',
 			// eslint-disable-next-line camelcase
